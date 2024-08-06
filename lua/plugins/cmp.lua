@@ -24,7 +24,20 @@ return {
       local luasnip = require("luasnip")
       local cmp = require("cmp")
 
+      opts.snippet = {
+        expand = function(args)
+          require('luasnip').lsp_expand(args.body) -- For `luasnip` users.
+        end,
+      }
+
       opts.mapping = vim.tbl_extend("force", opts.mapping, {
+        ["<C-Space>"] = cmp.mapping(function()
+          if cmp.visible() then
+            cmp.close()
+          else
+            cmp.complete()
+          end
+        end, { "i", "s" }),
         ["<Tab>"] = cmp.mapping(function(fallback)
           if cmp.visible() then
             cmp.select_next_item()
