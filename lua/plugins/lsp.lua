@@ -4,6 +4,7 @@ return {
     opts = {
       -- LSP Server Settings
       ---@type lspconfig.options
+      inlay_hints = { enabled = false },
       servers = {
         eslint = {
           settings = {
