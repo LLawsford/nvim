@@ -1,7 +1,11 @@
 return {
   {
     "nvim-telescope/telescope.nvim",
+    dependencies = {
+      "andrew-george/telescope-themes",
+    },
     keys = {
+
       -- add a keymap to browse plugin files
       -- stylua: ignore
       {
@@ -13,8 +17,10 @@ return {
     -- change some options
     opts = {
       defaults = {
-        layout_strategy = "horizontal",
-        layout_config = { prompt_position = "top" },
+    layout_config = {
+      vertical = { width = 0.9 }
+      -- other layout configuration here
+    },
         sorting_strategy = "ascending",
         winblend = 0,
       },

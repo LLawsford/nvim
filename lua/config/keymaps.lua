@@ -9,3 +9,7 @@ vim.g["sneak#use_ic_scs"] = 1  -- Case sensitivity in sneak searches
 
 vim.api.nvim_set_keymap('n', 'f', '<Plug>Sneak_s', {})
 vim.api.nvim_set_keymap('n', 'F', '<Plug>Sneak_S', {})
+
+vim.keymap.set("n", "gr", function()
+  require("telescope.builtin").lsp_references({ include_declaration = false })
+end, { desc = "LSP References (Exclude Declarations)" })
