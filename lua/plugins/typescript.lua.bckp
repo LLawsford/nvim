@@ -1,0 +1,149 @@
+-- lua/plugins/typescript.lua
+return {
+  -- optional helper plugin that adds extra vtsls commands (not strictly required)
+  -- :VtsExec organize_imports, :VtsExec add_missing_imports, etc.
+  -- helper plugin for extra commands; don't auto-configure the LSP to avoid duplicates
+  { "yioneko/nvim-vtsls", lazy = true, config = false },
+
+  {
+    "neovim/nvim-lspconfig",
+    opts = function(_, opts)
+      opts.servers = opts.servers or {}
+
+      -- ESLint: use default run mode (onType) unless explicitly changed elsewhere
+
+      -- make sure the old TS servers are off
+      opts.servers.tsserver = { enabled = false }
+      opts.servers.ts_ls = { enabled = false }
+
+      -- vtsls main config
+      opts.servers.vtsls = {
+        -- increase Node.js V8 heap for vtsls (8 GB)
+        cmd_env = { NODE_OPTIONS = "--max-old-space-size=8192" },
+        -- explicit so other extras can extend
+        filetypes = {
+          "javascript",
+          "javascriptreact",
+          "javascript.jsx",
+          "typescript",
+          "typescriptreact",
+          "typescript.tsx",
+        },
+        settings = {
+          -- upstream vtsls options
+          vtsls = {
+            enableMoveToFileCodeAction = true,
+            autoUseWorkspaceTsdk = true,
+            experimental = {
+              maxInlayHintLength = 30,
+              completion = { enableServerSideFuzzyMatch = true },
+            },
+          },
+          -- TypeScript language features
+          typescript = {
+            updateImportsOnFileMove = { enabled = "always" },
+            suggest = { completeFunctionCalls = true },
+            inlayHints = {
+              enumMemberValues = { enabled = true },
+              functionLikeReturnTypes = { enabled = true },
+              parameterNames = { enabled = "literals" },
+              parameterTypes = { enabled = true },
+              propertyDeclarationTypes = { enabled = true },
+              variableTypes = { enabled = false },
+            },
+          },
+        },
+        -- quality-of-life keymaps for TS actions
+        keys = {},
+      }
+
+      -- on_attach: wire up the Move-to-File refactor UI and copy TS settings to JS
+      opts.setup = opts.setup or {}
+      opts.setup.tsserver = function()
+        return true
+      end
+      opts.setup.ts_ls = function()
+        return true
+      end
+      opts.setup.vtsls = function(_, server_opts)
+        require("lazyvim.util").lsp.on_attach(function(client, _)
+          -- Move-to-file refactor prompt (same pattern as LazyVim's TS extra)
+          client.commands["_typescript.moveToFileRefactoring"] = function(command)
+            local action, uri, range = unpack(command.arguments)
+            local function move(newf)
+              client.request("workspace/executeCommand", {
+                command = command.command,
+                arguments = { action, uri, range, newf },
+              })
+            end
+            local fname = vim.uri_to_fname(uri)
+            client.request("workspace/executeCommand", {
+              command = "typescript.tsserverRequest",
+              arguments = {
+                "getMoveToRefactoringFileSuggestions",
+                {
+                  file = fname,
+                  startLine = range.start.line + 1,
+                  startOffset = range.start.character + 1,
+                  endLine = range["end"].line + 1,
+                  endOffset = range["end"].character + 1,
+                },
+              },
+            }, function(_, result)
+              local files = result and result.body and result.body.files or {}
+              table.insert(files, 1, "Enter new path...")
+              vim.ui.select(files, {
+                prompt = "Select move destination:",
+                format_item = function(f)
+                  return vim.fn.fnamemodify(f, ":~:.")
+                end,
+              }, function(f)
+                if f and f:find("^Enter new path") then
+                  vim.ui.input({
+                    prompt = "Enter move destination:",
+                    default = vim.fn.fnamemodify(fname, ":h") .. "/",
+                    completion = "file",
+                  }, function(newf)
+                    if newf then
+                      move(newf)
+                    end
+                  end)
+                elseif f then
+                  move(f)
+                end
+              end)
+            end)
+          end
+        end, "vtsls")
+
+        -- mirror TS settings to JS
+        server_opts.settings.javascript =
+          vim.tbl_deep_extend("force", {}, server_opts.settings.typescript, server_opts.settings.javascript or {})
+      end
+
+      return opts
+    end,
+  },
+
+  -- OPTIONAL: organize imports on save via LSP (kept separate so you can delete it if you don’t want it)
+  {
+    "folke/lazy.nvim",
+    optional = true,
+    init = function()
+      -- Only for TS/JS buffers
+      local group = vim.api.nvim_create_augroup("VtslsOrganizeImportsOnSave", { clear = true })
+      vim.api.nvim_create_autocmd("BufWritePre", {
+        group = group,
+        pattern = { "*.ts", "*.tsx", "*.js", "*.jsx" },
+        callback = function(args)
+          local clients = vim.lsp.get_clients({ bufnr = args.buf, name = "vtsls" })
+          if #clients == 0 then
+            return
+          end
+          -- Use vtsls helper to organize imports without any picker UI
+          vim.cmd("silent! VtsExec organize_imports")
+        end,
+      })
+    end,
+  },
+}
