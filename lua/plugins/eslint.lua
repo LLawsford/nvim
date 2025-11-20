@@ -2,15 +2,49 @@ return {
   {
     "neovim/nvim-lspconfig",
     opts = function(_, opts)
+      local eslint_configs = {
+        ".eslintrc",
+        ".eslintrc.js",
+        ".eslintrc.cjs",
+        ".eslintrc.yaml",
+        ".eslintrc.yml",
+        ".eslintrc.json",
+        "eslint.config.js",
+        "eslint.config.cjs",
+        "eslint.config.mjs",
+        "eslint.config.ts",
+      }
+      local has_eslint_config = vim.fs.find(eslint_configs, { upward = true })[1]
+      local has_eslint_pkg_config = false
+      if not has_eslint_config then
+        local pkg_json = vim.fs.find("package.json", { upward = true })[1]
+        if pkg_json then
+          local f = io.open(pkg_json, "r")
+          if f then
+            local content = f:read("*a")
+            f:close()
+            if content and string.find(content, '"eslintConfig"') then
+              has_eslint_pkg_config = true
+            end
+          end
+        end
+      end
+
+      if not (has_eslint_config or has_eslint_pkg_config) then
+        if opts.servers and opts.servers.eslint then
+          opts.servers.eslint = nil
+        end
+        return opts
+      end
+
       opts.servers = opts.servers or {}
       opts.servers.eslint = opts.servers.eslint or {}
 
-      -- Default ESLint LSP settings: avoid formatting conflicts and auto-detect cwd
       opts.servers.eslint.settings = vim.tbl_deep_extend(
         "force",
         {
           workingDirectory = { mode = "auto" },
-          format = false, -- leave formatting to your formatter (e.g. Prettier)
+          format = false,
         },
         opts.servers.eslint.settings or {}
       )
@@ -56,11 +90,10 @@ return {
           new_config.settings.experimental.useFlatConfig = has_flat(root_dir)
         end
 
-        -- Chain to any previous custom setup if present
         if previous_setup then
           return previous_setup(server, server_opts)
         end
-        return false -- continue with default setup
+        return false
       end
 
       return opts
